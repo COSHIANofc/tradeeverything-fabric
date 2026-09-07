@@ -12,12 +12,14 @@ public final class TradePayloads {
 	public static final int MAX_CATALOG_ENTRIES = 4096;
 	private TradePayloads() {}
 
-	public record CatalogEntryData(Identifier id, int price, int quantity) {
+	/** variantId is a server-verifiable enchantment identity for enchanted books, never client stack data. */
+	public record CatalogEntryData(Identifier id, Identifier variantId, int price, int quantity) {
 		private static CatalogEntryData read(RegistryFriendlyByteBuf buffer) {
-			return new CatalogEntryData(buffer.readIdentifier(), buffer.readVarInt(), buffer.readVarInt());
+			Identifier id = buffer.readIdentifier(); Identifier variantId = buffer.readBoolean() ? buffer.readIdentifier() : null;
+			return new CatalogEntryData(id, variantId, buffer.readVarInt(), buffer.readVarInt());
 		}
 		private void write(RegistryFriendlyByteBuf buffer) {
-			buffer.writeIdentifier(id); buffer.writeVarInt(price); buffer.writeVarInt(quantity);
+			buffer.writeIdentifier(id); buffer.writeBoolean(variantId != null); if (variantId != null) buffer.writeIdentifier(variantId); buffer.writeVarInt(price); buffer.writeVarInt(quantity);
 		}
 	}
 
@@ -38,11 +40,11 @@ public final class TradePayloads {
 		@Override public Type<CatalogSync> type() { return TYPE; }
 	}
 
-	public record PurchaseRequest(int containerId, int version, Identifier itemId, int quantity) implements CustomPacketPayload {
+	public record PurchaseRequest(int containerId, int version, Identifier itemId, Identifier variantId, int quantity) implements CustomPacketPayload {
 		public static final Type<PurchaseRequest> TYPE = new Type<>(TradeEverything.id("purchase"));
 		public static final StreamCodec<RegistryFriendlyByteBuf, PurchaseRequest> CODEC = StreamCodec.ofMember(PurchaseRequest::write, PurchaseRequest::read);
-		private static PurchaseRequest read(RegistryFriendlyByteBuf buffer) { return new PurchaseRequest(buffer.readContainerId(), buffer.readVarInt(), buffer.readIdentifier(), buffer.readVarInt()); }
-		private void write(RegistryFriendlyByteBuf buffer) { buffer.writeContainerId(containerId); buffer.writeVarInt(version); buffer.writeIdentifier(itemId); buffer.writeVarInt(quantity); }
+		private static PurchaseRequest read(RegistryFriendlyByteBuf buffer) { int containerId = buffer.readContainerId(); int version = buffer.readVarInt(); Identifier itemId = buffer.readIdentifier(); return new PurchaseRequest(containerId, version, itemId, buffer.readBoolean() ? buffer.readIdentifier() : null, buffer.readVarInt()); }
+		private void write(RegistryFriendlyByteBuf buffer) { buffer.writeContainerId(containerId); buffer.writeVarInt(version); buffer.writeIdentifier(itemId); buffer.writeBoolean(variantId != null); if (variantId != null) buffer.writeIdentifier(variantId); buffer.writeVarInt(quantity); }
 		@Override public Type<PurchaseRequest> type() { return TYPE; }
 	}
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.a-dev
+
+- Replaced only the persisted structure-generated Witch add in Minecraft 26.2 Swamp Huts with the canonical TradeEverything merchant while preserving the vanilla Cat path.
+- Removed the custom jigsaw Trading Post, its resources, template generator, terrain placement path, and `/tre place` command.
+- Added registry-driven maximum-level vanilla enchanted-book Buy variants with typed stored-enchantment components and server-validated variant IDs.
+- Expanded the searchable screen to nine visible rows and centralized the right-detail panel rows to avoid text/control overlap.
+- Added persistent, server-authoritative TradeEverything transaction advancements.
+
 ## 0.6.a-dev
 
 - Filled Shulker Boxes now sell validated contents while retaining an empty shell; empty boxes still sell normally.

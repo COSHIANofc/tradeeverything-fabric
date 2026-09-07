@@ -16,11 +16,11 @@ final class CommandAndVersionTest {
 	@Test void authoritativeVersionIsDevRevisionFormat() throws Exception {
 		Properties properties = new Properties();
 		try (Reader reader = Files.newBufferedReader(Path.of("gradle.properties"))) { properties.load(reader); }
-		assertEquals("0.6.a-dev", properties.getProperty("mod_version"));
+		assertEquals("0.7.a-dev", properties.getProperty("mod_version"));
 		var metadata = JsonParser.parseString(Files.readString(Path.of("src/main/resources/fabric.mod.json"))).getAsJsonObject();
 		assertEquals("${version}", metadata.get("version").getAsString());
-		assertTrue(Files.readString(Path.of("README.md")).contains("0.6.a-dev"));
-		assertTrue(Files.readString(Path.of("README_ja.md")).contains("MAJOR.MINOR.REVISION-STATE"));
+		assertTrue(Files.readString(Path.of("README.md")).contains("0.7.a-dev"));
+		assertTrue(Files.readString(Path.of("README_ja.md")).contains("0.7.a-dev"));
 	}
 
 	@Test void focusedSearchConsumesEditableKeysWithoutSpecialCasingBindings() {

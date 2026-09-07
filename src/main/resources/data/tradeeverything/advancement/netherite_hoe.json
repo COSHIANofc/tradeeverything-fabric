@@ -1,0 +1,1 @@
+{"parent":"tradeeverything:first_trade","display":{"icon":{"id":"minecraft:netherite_hoe"},"title":{"translate":"advancement.tradeeverything.netherite_hoe.title"},"description":{"translate":"advancement.tradeeverything.netherite_hoe.description"},"frame":"goal"},"criteria":{"trade":{"trigger":"minecraft:impossible"}},"requirements":[["trade"]]}

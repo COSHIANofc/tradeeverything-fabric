@@ -2,6 +2,6 @@
   "required": true,
   "package": "com.coshian.tradeeverything.mixin",
   "compatibilityLevel": "JAVA_25",
-  "mixins": ["JigsawPlacementMixin"],
+  "mixins": ["SwampHutPieceMixin"],
   "injectors": {"defaultRequire": 1}
 }

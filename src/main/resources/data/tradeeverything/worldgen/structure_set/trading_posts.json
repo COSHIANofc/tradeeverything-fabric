@@ -1,9 +1,0 @@
-{
-  "placement": {
-    "type": "minecraft:random_spread",
-    "salt": 19870531,
-    "separation": 12,
-    "spacing": 40
-  },
-  "structures": [{"structure": "tradeeverything:trading_post", "weight": 1}]
-}

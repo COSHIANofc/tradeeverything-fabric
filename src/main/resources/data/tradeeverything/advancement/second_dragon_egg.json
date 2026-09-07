@@ -1,0 +1,1 @@
+{"parent":"tradeeverything:first_trade","display":{"icon":{"id":"minecraft:dragon_egg"},"title":{"translate":"advancement.tradeeverything.second_dragon_egg.title"},"description":{"translate":"advancement.tradeeverything.second_dragon_egg.description"},"frame":"goal"},"criteria":{"trade":{"trigger":"minecraft:impossible"}},"requirements":[["trade"]]}

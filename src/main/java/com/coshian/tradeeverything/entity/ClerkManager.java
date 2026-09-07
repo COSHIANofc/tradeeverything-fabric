@@ -87,8 +87,11 @@ public final class ClerkManager {
 	}
 
 	/** Creates a standalone or structure-backed canonical merchant using the shared persistent identity. */
-	public static Optional<Villager> createMerchant(ServerLevel level, BlockPos pos) {
-		Villager villager = EntityTypes.VILLAGER.create(level, EntitySpawnReason.COMMAND);
+	public static Optional<Villager> createMerchant(ServerLevel level, BlockPos pos) { return createMerchant(level, pos, EntitySpawnReason.COMMAND); }
+
+	/** The sole merchant factory, shared by commands, legacy markers, and Swamp Hut worldgen. */
+	public static Optional<Villager> createMerchant(ServerLevel level, BlockPos pos, EntitySpawnReason reason) {
+		Villager villager = EntityTypes.VILLAGER.create(level, reason);
 		if (villager == null) return Optional.empty();
 		villager.snapTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0, 0);
 		villager.addTag(CLERK_TAG); setAnchor(villager, pos);

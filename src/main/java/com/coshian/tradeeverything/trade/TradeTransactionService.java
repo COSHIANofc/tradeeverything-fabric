@@ -1,6 +1,7 @@
 package com.coshian.tradeeverything.trade;
 
 import com.coshian.tradeeverything.catalog.TradeCatalog;
+import com.coshian.tradeeverything.advancement.TradeAdvancements;
 import com.coshian.tradeeverything.catalog.SurvivalEligibility;
 import com.coshian.tradeeverything.menu.TradeEverythingMenu;
 import com.coshian.tradeeverything.price.SellOffer;
@@ -21,15 +22,18 @@ public final class TradeTransactionService {
 	private TradeTransactionService() {}
 
 	public static Result purchase(ServerPlayer player, int containerId, int requestedVersion, Identifier itemId) {
-		return purchase(player, containerId, requestedVersion, itemId, 1);
+		return purchase(player, containerId, requestedVersion, itemId, null, 1);
 	}
 
 	/** Atomically buys transaction units; price and output are recomputed solely on the server. */
 	public static Result purchase(ServerPlayer player, int containerId, int requestedVersion, Identifier itemId, int quantity) {
+		return purchase(player, containerId, requestedVersion, itemId, null, quantity);
+	}
+	public static Result purchase(ServerPlayer player, int containerId, int requestedVersion, Identifier itemId, Identifier variantId, int quantity) {
 		Result session = validateSession(player, containerId, requestedVersion);
 		if (session != null) return session;
 		if (quantity <= 0 || quantity > MAX_BUY_QUANTITY) return Result.INVALID_BUY_QUANTITY;
-		var entry = TradeCatalog.enabled(itemId);
+		var entry = TradeCatalog.enabled(itemId, variantId);
 		if (entry.isEmpty()) return Result.DISABLED_ITEM;
 		TradeCatalog.Entry trade = entry.orElseThrow();
 		if (trade.price() < 1 || trade.quantity() < 1 || trade.quantity() > trade.item().getDefaultMaxStackSize()) return Result.INVALID_CATALOG_ENTRY;
@@ -41,8 +45,9 @@ public final class TradeTransactionService {
 		List<ItemStack> updated = copy(inventory);
 		try { if (!Currency.pay(updated, totalPrice)) return Result.INSUFFICIENT_PAYMENT; }
 		catch (ArithmeticException exception) { return Result.ARITHMETIC_OVERFLOW; }
-		if (!insert(updated, new ItemStack(trade.item()), totalOutput)) return Result.INVENTORY_FULL;
+		if (!insert(updated, TradeCatalog.output(trade), totalOutput)) return Result.INVENTORY_FULL;
 		commit(player, inventory, updated);
+		TradeAdvancements.recordTrade(player, trade.id());
 		return Result.SUCCESS;
 	}
 
@@ -82,6 +87,7 @@ public final class TradeTransactionService {
 		if (!removeSafe(updated, trade.item(), quantity)) return Result.INSUFFICIENT_SELLABLE_ITEMS;
 		if (!insert(updated, Items.EMERALD.getDefaultInstance(), reward)) return Result.REWARD_INVENTORY_FULL;
 		commit(player, inventory, updated);
+		TradeAdvancements.recordTrade(player, trade.id());
 		return Result.SUCCESS;
 	}
 
@@ -103,6 +109,7 @@ public final class TradeTransactionService {
 		updated.set(slot, retainedShell);
 		if (!insertInto(updated, Items.EMERALD.getDefaultInstance(), reward)) return Result.REWARD_INVENTORY_FULL;
 		commit(player, inventory, updated);
+		for (ItemStack contained : contents.nonEmptyItemCopyStream().toList()) TradeAdvancements.recordTrade(player, net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(contained.getItem()));
 		return Result.SUCCESS;
 	}
 

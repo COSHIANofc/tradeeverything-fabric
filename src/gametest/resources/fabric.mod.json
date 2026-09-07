@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "tradeeverything-gametest",
-  "version": "0.6.a-dev",
+  "version": "0.7.a-dev",
   "name": "TradeEverything GameTests",
   "environment": "*",
   "entrypoints": {"fabric-gametest": ["com.coshian.tradeeverything.TradeEverythingGameTest"]},

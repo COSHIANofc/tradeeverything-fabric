@@ -9,7 +9,6 @@ import com.coshian.tradeeverything.network.TradeNetworking;
 import com.coshian.tradeeverything.network.TradePayloads.SellRequest;
 import com.coshian.tradeeverything.price.PriceConfig;
 import com.coshian.tradeeverything.trade.TradeTransactionService;
-import com.coshian.tradeeverything.world.TradingPostTerrain;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -24,8 +23,6 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
@@ -50,8 +47,7 @@ public final class TradeEverythingGameTest {
 		CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
 		TradeEverythingCommands.registerForTesting(dispatcher);
 		var root = dispatcher.getRoot().getChild("tre");
-		helper.assertTrue(root != null && root.getChild("place") != null && root.getChild("summon") != null && root.getChild("verify") != null && root.getChild("reload") != null, "The /tre command tree must contain all administrative subcommands");
-		helper.assertTrue(((ArgumentCommandNode<CommandSourceStack, ?>)root.getChild("place").getChild("pos")).getType() instanceof net.minecraft.commands.arguments.coordinates.BlockPosArgument, "/tre place must use Minecraft's block position argument");
+		helper.assertTrue(root != null && root.getChild("place") == null && root.getChild("summon") != null && root.getChild("verify") != null && root.getChild("reload") != null, "The obsolete Trading Post placement command must not be registered");
 		helper.assertTrue(((ArgumentCommandNode<CommandSourceStack, ?>)root.getChild("summon").getChild("pos")).getType() instanceof net.minecraft.commands.arguments.coordinates.BlockPosArgument, "/tre summon must use Minecraft's block position argument");
 		helper.assertTrue(dispatcher.getRoot().getChild("tradeeverything") == null, "The legacy /tradeeverything root must not be registered");
 		helper.succeed();
@@ -59,7 +55,7 @@ public final class TradeEverythingGameTest {
 
 	@GameTest
 	public void catalogIntegrityAndEligibility(GameTestHelper helper) {
-		TradeCatalog.rebuild(); TradeCatalog.Audit audit = TradeCatalog.audit();
+		TradeCatalog.rebuild(helper.getLevel().registryAccess()); TradeCatalog.Audit audit = TradeCatalog.audit();
 		for (Item item : new Item[] {Items.AIR, Items.BARRIER, Items.COMMAND_BLOCK, Items.STRUCTURE_BLOCK, Items.DEBUG_STICK, Items.PLAYER_HEAD, Items.VILLAGER_SPAWN_EGG})
 			helper.assertTrue(!SurvivalEligibility.isEligible(item), BuiltInRegistries.ITEM.getKey(item) + " must be excluded");
 		for (Item item : new Item[] {Items.OAK_LOG, Items.DIAMOND, Items.ELYTRA, Items.NETHERITE_INGOT})
@@ -74,22 +70,17 @@ public final class TradeEverythingGameTest {
 	}
 
 	@GameTest
-	public void templateHasOneVanillaMerchantMarker(GameTestHelper helper) {
-		var structureKey = ResourceKey.create(Registries.STRUCTURE, TradeEverything.id("trading_post"));
-		var poolKey = ResourceKey.create(Registries.TEMPLATE_POOL, TradeEverything.id("trading_post"));
-		helper.assertTrue(helper.getLevel().registryAccess().lookupOrThrow(Registries.STRUCTURE).get(structureKey).isPresent(), "Trading Post structure registry entry must resolve");
-		helper.assertTrue(helper.getLevel().registryAccess().lookupOrThrow(Registries.TEMPLATE_POOL).get(poolKey).isPresent(), "Trading Post start pool must resolve");
-		var template = helper.getLevel().getStructureManager().get(TradeEverything.id("trading_post"));
-		helper.assertTrue(template.isPresent(), "Trading Post template must load");
-		var size = template.orElseThrow().getSize();
-		helper.assertTrue(size.getX() == TradingPostTerrain.FOOTPRINT && size.getY() == TradingPostTerrain.TEMPLATE_HEIGHT && size.getZ() == TradingPostTerrain.FOOTPRINT, "Terrain-aware template dimensions");
-		CompoundTag saved = template.orElseThrow().save(new CompoundTag());
-		helper.assertTrue(!saved.getListOrEmpty("blocks").isEmpty(), "Trading Post template must contain blocks");
-		helper.assertTrue(saved.getListOrEmpty("entities").size() == 1, "New posts must contain one merchant marker");
-		saved.getListOrEmpty("palette").forEach(tag -> tag.asCompound().flatMap(value -> value.getString("Name"))
-			.ifPresent(name -> helper.assertTrue(name.startsWith("minecraft:"), "Every structure block must be vanilla")));
-		saved.getListOrEmpty("entities").forEach(tag -> tag.asCompound().flatMap(value -> value.getCompound("nbt")).flatMap(value -> value.getString("id"))
-			.ifPresent(id -> helper.assertTrue(id.equals("minecraft:armor_stand"), "Marker entity must be vanilla")));
+	public void vanillaEnchantedBooksAreRealCatalogVariants(GameTestHelper helper) {
+		TradeCatalog.rebuild(helper.getLevel().registryAccess());
+		Identifier book = BuiltInRegistries.ITEM.getKey(Items.ENCHANTED_BOOK);
+		var vanilla = helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT).listElements().filter(holder -> holder.unwrapKey().orElseThrow().identifier().getNamespace().equals("minecraft")).toList();
+		var variants = TradeCatalog.enabledEntries().stream().filter(entry -> entry.id().equals(book) && entry.variantId() != null).toList();
+		helper.assertTrue(variants.size() == vanilla.size() && !variants.isEmpty(), "Every and only vanilla enchantment must have one book variant");
+		for (var entry : variants) {
+			ItemStack output = TradeCatalog.output(entry); var stored = output.get(DataComponents.STORED_ENCHANTMENTS);
+			helper.assertTrue(stored != null && stored.getLevel(entry.enchantment()) == entry.enchantment().value().getMaxLevel(), "Book output must carry its valid maximum stored enchantment");
+		}
+		helper.assertTrue(TradeCatalog.enabled(book).isEmpty() && TradeCatalog.enabled(book, TradeEverything.id("forged_enchantment")).isEmpty(), "Blank books and forged variants must not be Buy entries");
 		helper.succeed();
 	}
 

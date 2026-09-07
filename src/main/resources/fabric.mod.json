@@ -3,7 +3,7 @@
   "id": "tradeeverything",
   "version": "${version}",
   "name": "TradeEverything",
-  "description": "A naturally generated trading post with one searchable merchant for Survival-obtainable vanilla items.",
+  "description": "A searchable all-item merchant replacing the Witch in vanilla Swamp Huts.",
   "authors": ["COSHIAN"],
   "contact": {"sources": "https://github.com/COSHIANofc/TradeEverything-Mod-"},
   "license": "Apache-2.0",

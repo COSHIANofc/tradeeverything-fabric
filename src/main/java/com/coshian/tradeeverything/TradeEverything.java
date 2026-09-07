@@ -24,8 +24,8 @@ public final class TradeEverything implements ModInitializer {
 		ClerkManager.registerEvents();
 		ServerLifecycleEvents.SERVER_STARTING.register(server -> {
 			PriceConfig.load();
-			TradeCatalog.rebuild();
-			LOGGER.info("Searchable trade catalog ready: {} enabled items for one merchant per Trading Post", TradeCatalog.enabledEntries().size());
+			TradeCatalog.rebuild(server.registryAccess());
+			LOGGER.info("Searchable trade catalog ready: {} enabled entries for Swamp Hut merchants", TradeCatalog.enabledEntries().size());
 		});
 	}
 }

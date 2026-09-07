@@ -30,7 +30,7 @@ public final class TradeNetworking {
 		PayloadTypeRegistry.serverboundPlay().register(SellRequest.TYPE, SellRequest.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(PurchaseResult.TYPE, PurchaseResult.CODEC);
 		ServerPlayNetworking.registerGlobalReceiver(PurchaseRequest.TYPE, (payload, context) -> {
-			TradeTransactionService.Result result = TradeTransactionService.purchase(context.player(), payload.containerId(), payload.version(), payload.itemId(), payload.quantity());
+			TradeTransactionService.Result result = TradeTransactionService.purchase(context.player(), payload.containerId(), payload.version(), payload.itemId(), payload.variantId(), payload.quantity());
 			ServerPlayNetworking.send(context.player(), new PurchaseResult(payload.containerId(), TransactionType.BUY, result.success(), result.success() ? "screen.tradeeverything.result.buy_success" : result.translationKey()));
 		});
 		ServerPlayNetworking.registerGlobalReceiver(SellRequest.TYPE, (payload, context) -> {
@@ -58,7 +58,7 @@ public final class TradeNetworking {
 		List<TradeCatalog.Entry> entries = TradeCatalog.enabledEntries();
 		if (cachedCatalogIdentity != entries) {
 			cachedCatalogIdentity = entries;
-			cachedCatalogPayload = entries.stream().map(entry -> new CatalogEntryData(entry.id(), entry.price(), entry.quantity())).toList();
+			cachedCatalogPayload = entries.stream().map(entry -> new CatalogEntryData(entry.id(), entry.variantId(), entry.price(), entry.quantity())).toList();
 		}
 		return cachedCatalogPayload;
 	}

@@ -1,0 +1,1 @@
+{"display":{"icon":{"id":"minecraft:emerald"},"title":{"translate":"advancement.tradeeverything.first_trade.title"},"description":{"translate":"advancement.tradeeverything.first_trade.description"}},"criteria":{"trade":{"trigger":"minecraft:impossible"}},"requirements":[["trade"]]}
