@@ -53,9 +53,6 @@ public final class PriceConfig {
 	private static int read(JsonObject root, Mutable next, String source, ItemLookup items) {
 		int rejected = 0;
 		rejected += setInt(root, "catalog_version", 1, Integer.MAX_VALUE, value -> next.catalogVersion = value, source);
-		rejected += setInt(root, "structure_spacing", 16, 4096, value -> next.spacing = value, source);
-		rejected += setInt(root, "structure_separation", 1, 4095, value -> next.separation = value, source);
-		if (next.separation >= next.spacing) { rejected++; next.separation = Math.max(1, next.spacing / 3); warn("structure_separation", source, "must be less than structure_spacing"); }
 		if (root.has("language")) try { next.language = Language.valueOf(root.get("language").getAsString().toUpperCase(Locale.ROOT)); } catch (Exception exception) { rejected++; warn("language", source, "expected en_us or ja_jp"); }
 		if (root.has("protect_npcs")) try { next.protectNpcs = root.get("protect_npcs").getAsBoolean(); } catch (Exception exception) { rejected++; warn("protect_npcs", source, "expected a boolean"); }
 		if (!root.has("items")) return rejected;
@@ -115,9 +112,9 @@ public final class PriceConfig {
 	public record SellRule(int items, int emeralds) { }
 	public record ItemRule(boolean enabled, BuyRule buy, SellRule sell) { }
 	public record Status(boolean healthy, int accepted, int rejected) { }
-	public record Snapshot(Language language, boolean protectNpcs, int catalogVersion, int spacing, int separation, Map<Identifier, ItemRule> items, int rejected) { static Snapshot defaults() { return new Snapshot(Language.EN_US, true, 3, 40, 12, Map.of(), 0); } }
+	public record Snapshot(Language language, boolean protectNpcs, int catalogVersion, Map<Identifier, ItemRule> items, int rejected) { static Snapshot defaults() { return new Snapshot(Language.EN_US, true, 3, Map.of(), 0); } }
 	static record LoadResult(Snapshot snapshot, Status status, boolean created) { }
 	@FunctionalInterface interface ItemLookup { Integer maxStack(Identifier id); }
 	private record Field<T>(T value, int rejected) { }
-	private static final class Mutable { Language language = Language.EN_US; boolean protectNpcs = true; int catalogVersion = 3; int spacing = 40; int separation = 12; final Map<Identifier, ItemRule> items = new HashMap<>(); Snapshot freeze(int rejected) { return new Snapshot(language, protectNpcs, catalogVersion, spacing, separation, Map.copyOf(items), rejected); } }
+	private static final class Mutable { Language language = Language.EN_US; boolean protectNpcs = true; int catalogVersion = 3; final Map<Identifier, ItemRule> items = new HashMap<>(); Snapshot freeze(int rejected) { return new Snapshot(language, protectNpcs, catalogVersion, Map.copyOf(items), rejected); } }
 }

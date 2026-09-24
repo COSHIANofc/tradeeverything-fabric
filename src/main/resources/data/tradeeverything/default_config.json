@@ -2,14 +2,12 @@
   "language": "en_us",
   "protect_npcs": true,
   "catalog_version": 3,
-  "structure_spacing": 40,
-  "structure_separation": 12,
   "items": {
-    "minecraft:diamond": {"enabled": true, "emeralds": 24, "output": 1},
-    "minecraft:netherite_ingot": {"emeralds": 144, "output": 1},
-    "minecraft:elytra": {"emeralds": 288, "output": 1},
-    "minecraft:dragon_egg": {"emeralds": 576, "output": 1},
-    "minecraft:nether_star": {"emeralds": 288, "output": 1},
-    "minecraft:enchanted_golden_apple": {"emeralds": 128, "output": 1}
+    "minecraft:diamond": {"enabled": true, "buy": {"emeralds": 24, "output": 1}},
+    "minecraft:netherite_ingot": {"buy": {"emeralds": 144, "output": 1}},
+    "minecraft:elytra": {"buy": {"emeralds": 288, "output": 1}},
+    "minecraft:dragon_egg": {"buy": {"emeralds": 576, "output": 1}},
+    "minecraft:nether_star": {"buy": {"emeralds": 288, "output": 1}},
+    "minecraft:enchanted_golden_apple": {"buy": {"emeralds": 128, "output": 1}}
   }
 }

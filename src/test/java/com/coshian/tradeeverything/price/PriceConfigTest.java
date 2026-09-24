@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.google.gson.JsonParser;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -29,6 +30,24 @@ final class PriceConfigTest {
 		assertTrue(Files.isRegularFile(config));
 		assertTrue(result.status().healthy());
 		assertEquals(24, price(result, "diamond").emeraldValue());
+	}
+
+	@Test void bundledDefaultsUseModernBuyRulesWithoutExplicitSellRules() throws Exception {
+		Path config = temporaryDirectory.resolve(PriceConfig.FILE_NAME);
+		PriceConfig.LoadResult result = PriceConfig.parse(config, true, LOOKUP);
+		var root = JsonParser.parseString(Files.readString(config)).getAsJsonObject();
+		assertTrue(root.has("language") && root.has("protect_npcs") && root.has("catalog_version"));
+		assertFalse(root.has("structure_spacing") || root.has("structure_separation"));
+		var expected = Map.of("diamond", 24, "netherite_ingot", 144, "elytra", 288, "dragon_egg", 576, "nether_star", 288, "enchanted_golden_apple", 128);
+		for (var entry : expected.entrySet()) {
+			var rule = root.getAsJsonObject("items").getAsJsonObject("minecraft:" + entry.getKey());
+			assertTrue(rule.has("buy"));
+			assertFalse(rule.has("emeralds") || rule.has("output") || rule.has("sell"));
+			assertEquals(entry.getValue().intValue(), rule.getAsJsonObject("buy").get("emeralds").getAsInt());
+			assertEquals(1, rule.getAsJsonObject("buy").get("output").getAsInt());
+			assertEquals(new PriceConfig.Price(entry.getValue(), 1), price(result, entry.getKey()));
+			assertEquals(SellPricing.sellOfferFor(entry.getValue()), PriceConfig.sellOffer(result.snapshot(), id(entry.getKey()), entry.getValue()));
+		}
 	}
 
 	@Test void validConfigurationMergesIndependentOptionalItemFields() throws Exception {
