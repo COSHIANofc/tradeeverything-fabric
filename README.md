@@ -1,25 +1,25 @@
 # TradeEverything
 
-TradeEverything is a Fabric mod for Minecraft 26.2. In newly generated vanilla Swamp Huts, only the structure-generated Witch is replaced with one canonical TradeEverything Villager merchant. The hut and its Cat remain vanilla, and already-generated huts are not changed.
+TradeEverything is a Fabric mod for Minecraft 26.2. In newly generated vanilla Swamp Huts, the Witch is replaced by a TradeEverything merchant. The hut and its Cat remain unchanged, and existing huts are not modified.
 
-The merchant provides a searchable, server-authoritative Buy/Sell screen. It shows exactly seven catalog rows at a time, supports scrolling, and matches trimmed, case-insensitive partial localized names and registry IDs. The right detail panel uses one shared layout for text and controls, including bounded long text.
+## Install
 
-## Requirements and installation
-
-Minecraft 26.2, Java 25, Fabric Loader 0.19.3 or newer, a compatible Fabric API 0.157.0+26.2 or newer, and TradeEverything 0.8.b-dev are required on both client and server. Put Fabric API and `tradeeverything-0.8.b-dev.jar` in both `mods` directories.
+Install Fabric Loader 0.19.3 or newer, a compatible Fabric API 0.157.0+26.2 or newer, and TradeEverything 0.8.b-dev on both the client and server. Java 25 and Minecraft 26.2 are required. Put Fabric API and `tradeeverything-0.8.b-dev.jar` in each `mods` directory.
 
 ## Trading
 
-- Buy payments accept Emeralds and Emerald Blocks. One Emerald Block is worth nine Emeralds; loose Emeralds are used first and any change is returned as Emeralds.
-- Enchanted books are one logical catalog entry per vanilla enchantment. Select a level from the synced valid range; the server creates and validates the stored-enchantment component.
-- Potions are logical brewing-reachable families, not arbitrary effect combinations. Select one legal option plus Potion, Splash Potion, or Lingering Potion. The server resolves the real potion and constructs its potion contents.
-- Search covers ordinary-item names/IDs, enchantment names/IDs, potion-family terms, legal potion IDs, and potion-container IDs. When the search field is focused, `E` types `e`; `Esc` still closes the screen normally.
+The merchant offers Buy and Sell modes in one searchable catalog. Seven results are visible at once; use the mouse wheel to scroll. Search accepts item names and registry IDs, ignores leading/trailing spaces and case, and supports partial matches.
 
-All prices, variant selections, inventory capacity checks, and payment/inventory changes are validated by the server. Client requests never supply an authoritative item stack, potion contents, NBT, or components.
+- Use the quantity controls to choose the trade amount; modifier keys keep their accelerated adjustments.
+- Buy payments accept Emeralds and Emerald Blocks. One Emerald Block equals nine Emeralds. Loose Emeralds are used first and any change is returned as Emeralds.
+- Each vanilla enchantment has one book entry. Choose any available level, including the single valid level for enchantments such as Mending.
+- Potions are grouped by effect family. Choose an available potion variant and then Potion, Splash Potion, or Lingering Potion.
+
+The server verifies prices, selected variants, payment, and inventory space before completing a trade.
 
 ## Configuration
 
-The configuration file is `config/config`. Item rules may use the modern independent Buy/Sell form:
+The configuration file is `config/config`. Buy and Sell rules can be set independently:
 
 ```json
 {
@@ -50,9 +50,9 @@ The configuration file is `config/config`. Item rules may use the modern indepen
 }
 ```
 
-`buy.emeralds` is the cost per purchase unit and `buy.output` is the server-created output count. `sell.items` and `sell.emeralds` form a bundle ratio: the diamond rule above trades 4 diamonds for 3 Emeralds, so 4 and 8 are valid quantities while 5 is rejected. If no explicit `sell` block exists, the existing derived `SellPricing` fallback remains in use.
+`buy.emeralds` is the Emerald cost and `buy.output` is the number of items received per purchase. `sell.items` and `sell.emeralds` form a bundle: `items: 4` and `emeralds: 3` trades every four items for three Emeralds. Therefore, 4 and 8 items are valid quantities; 5 is not. If a rule has no `sell` block, the usual Sell price is used.
 
-The legacy form remains supported:
+Older rules still work:
 
 ```json
 {
@@ -62,17 +62,17 @@ The legacy form remains supported:
 }
 ```
 
-Legacy `emeralds` and `output` are Buy settings only. A modern `buy` block overrides legacy Buy fields when both are present. Loading an old configuration does not rewrite the user's file.
+In this form, `emeralds` and `output` apply to Buy only. If both old fields and a modern `buy` block exist, the modern `buy` block takes priority. Existing configuration files are read as-is and are not automatically rewritten.
 
-Vanilla eligible items remain automatic. Non-`minecraft` items are never auto-enumerated: they require an enabled explicit rule and a live registered item ID. Missing configured IDs are warned about and skipped. Generic configured mod items use their normal default stack; the mod does not invent arbitrary custom component state. Component-sensitive Sell matching is retained.
+Eligible vanilla items are available automatically. Mod items require an enabled, explicit rule and must be installed. Unknown configured IDs are skipped safely. Configured mod items use their normal item form; custom component states are not created by configuration.
 
 ## Progress
 
-TradeEverything adds four hidden-to-discovery progress goals, awarded only after completed authoritative merchant transactions. The all-items objective has a fixed vanilla canonical universe of 1411 units: ordinary eligible vanilla items contribute individually, all enchanted-book levels share one unit, all potion families/options/containers share one unit, and non-`minecraft` items contribute zero units. Filled Shulker Box contents are recorded; the retained box shell is not.
+Progress is awarded after successful merchant trades. For the all-items goal, eligible vanilla items count individually; all enchanted books count as one category; all potion variants and containers count as one category; and mod items do not change the requirement. The current requirement is 1411 units. Filled Shulker Box contents count when sold, while the retained empty box does not.
 
 ## Commands
 
-Operator commands require permission level 2:
+Operator permission level 2 is required:
 
 ```text
 /tre summon [<x> <y> <z>]
@@ -80,11 +80,7 @@ Operator commands require permission level 2:
 /tre reload
 ```
 
-`summon` is an administrative/debug way to create the canonical merchant. It does not test Swamp Hut replacement.
-
-## Development
-
-The validated minimum baseline is Minecraft 26.2, Fabric Loader 0.19.3, Fabric API 0.157.0+26.2, Fabric Loom 1.17.2, Gradle 9.7.1, and Java 25. Run `./gradlew clean build` to produce `build/libs/tradeeverything-0.8.b-dev.jar`.
+`/tre summon` creates a merchant for administration or testing. It does not change an existing Swamp Hut.
 
 ## License
 
