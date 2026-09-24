@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import com.coshian.tradeeverything.advancement.AllItemsProgression;
 import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -88,6 +89,55 @@ final class PriceConfigTest {
 		assertEquals(new PriceConfig.Price(12, 1), price(result, "diamond_sword"));
 		assertEquals(new PriceConfig.Price(6, 1), price(result, "ender_pearl"));
 		assertEquals(new PriceConfig.Price(2, 1), price(result, "stone"));
+	}
+
+	@Test void modernBuySellRulesAreIndependentAndOverrideLegacyBuyFields() throws Exception {
+		Path config = write("""
+			{"items":{"minecraft:diamond":{"emeralds":99,"output":9,"buy":{"emeralds":24,"output":1},"sell":{"items":4,"emeralds":3}}}}
+			""");
+		PriceConfig.LoadResult result = PriceConfig.parse(config, false, LOOKUP);
+		PriceConfig.ItemRule rule = result.snapshot().items().get(id("diamond"));
+		assertEquals(new PriceConfig.BuyRule(24, 1), rule.buy(), "Modern buy is authoritative when legacy fields coexist");
+		assertEquals(new PriceConfig.SellRule(4, 3), rule.sell());
+		assertEquals(new SellOffer(4, 3), PriceConfig.sellOffer(result.snapshot(), id("diamond"), 24));
+	}
+
+	@Test void legacyRulesRemainBuyOnlyAndConfiguredModIdsNeedLiveLookup() throws Exception {
+		Path config = write("""
+			{"items":{"minecraft:diamond":{"emeralds":24,"output":1},"examplemod:ruby":{"enabled":true,"buy":{"emeralds":8,"output":1},"sell":{"items":2,"emeralds":1}},"missingmod:ghost":{"enabled":true,"buy":{"emeralds":8,"output":1}}}}
+			""");
+		PriceConfig.ItemLookup lookup = id -> id.toString().equals("examplemod:ruby") ? 64 : LOOKUP.maxStack(id);
+		PriceConfig.LoadResult result = PriceConfig.parse(config, false, lookup);
+		assertEquals(new PriceConfig.BuyRule(24, 1), result.snapshot().items().get(id("diamond")).buy());
+		assertEquals(null, result.snapshot().items().get(id("diamond")).sell(), "Legacy fields never imply explicit Sell");
+		assertEquals(new PriceConfig.BuyRule(8, 1), result.snapshot().items().get(Identifier.parse("examplemod:ruby")).buy());
+		assertFalse(result.snapshot().items().containsKey(Identifier.parse("missingmod:ghost")), "Absent registry IDs are skipped safely");
+	}
+
+	@Test void malformedModernRulesAreRejectedWithoutConfigRewrite() throws Exception {
+		String contents = "{\"items\":{\"minecraft:diamond\":{\"buy\":{\"emeralds\":0,\"output\":1},\"sell\":{\"items\":0,\"emeralds\":3}}}}";
+		Path config = write(contents);
+		PriceConfig.LoadResult result = PriceConfig.parse(config, false, LOOKUP);
+		assertFalse(result.status().healthy());
+		assertEquals(contents, Files.readString(config));
+		assertEquals(new PriceConfig.Price(24, 1), price(result, "diamond"));
+		assertEquals(null, result.snapshot().items().get(id("diamond")).sell());
+	}
+
+	@Test void sellOnlyRuleKeepsSafeAutomaticBuyFallback() throws Exception {
+		PriceConfig.LoadResult result = PriceConfig.parse(write("{\"items\":{\"minecraft:stone\":{\"sell\":{\"items\":4,\"emeralds\":3}}}}"), false, LOOKUP);
+		PriceConfig.ItemRule rule = result.snapshot().items().get(id("stone"));
+		assertEquals(new PriceConfig.Price(2, 1), price(result, "stone"));
+		assertEquals(new SellOffer(4, 3), PriceConfig.sellOffer(result.snapshot(), id("stone"), 2));
+		assertEquals(new PriceConfig.SellRule(4, 3), rule.sell());
+	}
+
+	@Test void manyExplicitModRulesStayOutsideAllItemsProgression() throws Exception {
+		PriceConfig.ItemLookup lookup = id -> id.getNamespace().equals("examplemod") || id.getNamespace().equals("anothermod") || id.getNamespace().equals("thirdmod") ? 64 : LOOKUP.maxStack(id);
+		PriceConfig.LoadResult result = PriceConfig.parse(write("{\"items\":{\"examplemod:ruby\":{\"buy\":{\"emeralds\":8,\"output\":1}},\"anothermod:sapphire\":{\"buy\":{\"emeralds\":9,\"output\":1}},\"thirdmod:part\":{\"sell\":{\"items\":2,\"emeralds\":1}}}}"), false, lookup);
+		var modded = result.snapshot().items().keySet().stream().filter(id -> !id.getNamespace().equals("minecraft")).toList();
+		assertEquals(3, modded.size());
+		assertTrue(modded.stream().noneMatch(id -> AllItemsProgression.key(id).isPresent()));
 	}
 
 	private Path write(String contents) throws Exception {

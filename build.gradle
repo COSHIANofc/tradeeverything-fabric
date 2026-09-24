@@ -2,6 +2,8 @@ plugins {
 	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 	id 'maven-publish'
 }
+import net.fabricmc.loom.LoomGradleExtension
+import net.fabricmc.loom.api.mappings.layered.MappingsNamespace
 
 version = project.mod_version
 group = project.maven_group
@@ -40,6 +42,32 @@ processResources {
 	inputs.property 'version', project.version
 	filesMatching('fabric.mod.json') { expand version: inputs.properties.version }
 }
+
+def generatedAdvancements = layout.buildDirectory.dir('generated/resources/advancements')
+def loomMinecraftJars = LoomGradleExtension.get(project).getMinecraftJarsCollection(MappingsNamespace.NAMED)
+tasks.register('generateAllItemsAdvancement') {
+	inputs.files(loomMinecraftJars)
+	outputs.dir(generatedAdvancements)
+	doLast {
+		def excluded = ['air','bedrock','barrier','light','debug_stick','knowledge_book','command_block','chain_command_block','repeating_command_block','command_block_minecart','structure_block','structure_void','jigsaw','test_block','test_instance_block','spawner','trial_spawner','vault','end_portal_frame','reinforced_deepslate','budding_amethyst','suspicious_sand','suspicious_gravel','frogspawn','farmland','dirt_path','petrified_oak_slab','chorus_plant','player_head','infested_stone','infested_cobblestone','infested_stone_bricks','infested_mossy_stone_bricks','infested_cracked_stone_bricks','infested_chiseled_stone_bricks','infested_deepslate'] as Set
+		def names=[] as Set
+		def archives = loomMinecraftJars.files.findAll { candidate ->
+			candidate.isFile() && new java.util.zip.ZipFile(candidate).withCloseable { zip -> zip.entries().any { it.name.startsWith('assets/minecraft/items/') && it.name.endsWith('.json') } }
+		}
+		if (archives.empty) throw new GradleException("Loom NAMED Minecraft JARs contained no assets/minecraft/items resources: ${loomMinecraftJars.files}")
+		logger.lifecycle("TradeEverything advancement generator inspected {} Loom Minecraft JAR(s)", loomMinecraftJars.files.size())
+		archives.each { archive -> zipTree(archive).matching { include 'assets/minecraft/items/*.json' }.files.each { f ->
+			def id=f.name[0..-6]; if (!excluded.contains(id) && !id.endsWith('_spawn_egg') && !['enchanted_book','potion','splash_potion','lingering_potion'].contains(id)) names << "item__minecraft__${id.replace('/','_')}"
+		} }
+		names.add('special__enchanted_book'); names.add('special__potion'); def sorted=names.toList().sort()
+		def criteria=sorted.collectEntries { [(it): [trigger:'minecraft:impossible']] }
+		def out=generatedAdvancements.get().file('data/tradeeverything/advancement/all_items.json').asFile; out.parentFile.mkdirs()
+		out.text=groovy.json.JsonOutput.toJson([parent:'tradeeverything:first_trade',display:[icon:[id:'minecraft:emerald_block'],title:[translate:'advancement.tradeeverything.all_items.title'],description:[translate:'advancement.tradeeverything.all_items.description'],frame:'challenge'],criteria:criteria,requirements:sorted.collect { [it] }])
+	}
+}
+processResources.dependsOn(tasks.named('generateAllItemsAdvancement'))
+sourceSets.main.resources.exclude('data/tradeeverything/advancement/all_items.json')
+processResources.from(generatedAdvancements)
 
 tasks.withType(JavaCompile).configureEach { options.release = 25 }
 

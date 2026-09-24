@@ -8,6 +8,8 @@ import com.coshian.tradeeverything.network.TradeNetworking;
 import com.coshian.tradeeverything.price.PriceConfig;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import com.coshian.tradeeverything.advancement.TradeAdvancements;
 import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,5 +29,6 @@ public final class TradeEverything implements ModInitializer {
 			TradeCatalog.rebuild(server.registryAccess());
 			LOGGER.info("Searchable trade catalog ready: {} enabled entries for Swamp Hut merchants", TradeCatalog.enabledEntries().size());
 		});
+		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> TradeAdvancements.synchronize(handler.player));
 	}
 }

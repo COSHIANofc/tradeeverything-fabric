@@ -1,6 +1,7 @@
 package com.coshian.tradeeverything.trade;
 
 import com.coshian.tradeeverything.catalog.TradeCatalog;
+import com.coshian.tradeeverything.catalog.TradeVariantSelection;
 import com.coshian.tradeeverything.advancement.TradeAdvancements;
 import com.coshian.tradeeverything.catalog.SurvivalEligibility;
 import com.coshian.tradeeverything.menu.TradeEverythingMenu;
@@ -30,12 +31,22 @@ public final class TradeTransactionService {
 		return purchase(player, containerId, requestedVersion, itemId, null, quantity);
 	}
 	public static Result purchase(ServerPlayer player, int containerId, int requestedVersion, Identifier itemId, Identifier variantId, int quantity) {
+		return purchase(player, containerId, requestedVersion, itemId, variantId, 1, quantity);
+	}
+	/** Variant selection is bounded and resolved server-side; no client component data enters this path. */
+	public static Result purchase(ServerPlayer player, int containerId, int requestedVersion, Identifier itemId, Identifier variantId, int level, int quantity) {
+		return purchase(player, containerId, requestedVersion, itemId, variantId, TradeVariantSelection.enchantment(level), quantity);
+	}
+	/** Central variant route used by the only purchase receiver. Validation precedes payment simulation. */
+	public static Result purchase(ServerPlayer player, int containerId, int requestedVersion, Identifier itemId, Identifier variantId, TradeVariantSelection selection, int quantity) {
 		Result session = validateSession(player, containerId, requestedVersion);
 		if (session != null) return session;
 		if (quantity <= 0 || quantity > MAX_BUY_QUANTITY) return Result.INVALID_BUY_QUANTITY;
 		var entry = TradeCatalog.enabled(itemId, variantId);
 		if (entry.isEmpty()) return Result.DISABLED_ITEM;
 		TradeCatalog.Entry trade = entry.orElseThrow();
+		ItemStack output = TradeCatalog.resolveOutput(trade, selection).orElse(null);
+		if (output == null) return Result.INVALID_VARIANT;
 		if (trade.price() < 1 || trade.quantity() < 1 || trade.quantity() > trade.item().getDefaultMaxStackSize()) return Result.INVALID_CATALOG_ENTRY;
 
 		final int totalPrice, totalOutput;
@@ -45,7 +56,7 @@ public final class TradeTransactionService {
 		List<ItemStack> updated = copy(inventory);
 		try { if (!Currency.pay(updated, totalPrice)) return Result.INSUFFICIENT_PAYMENT; }
 		catch (ArithmeticException exception) { return Result.ARITHMETIC_OVERFLOW; }
-		if (!insert(updated, TradeCatalog.output(trade), totalOutput)) return Result.INVENTORY_FULL;
+		if (!insert(updated, output, totalOutput)) return Result.INVENTORY_FULL;
 		commit(player, inventory, updated);
 		TradeAdvancements.recordTrade(player, trade.id());
 		return Result.SUCCESS;
@@ -65,15 +76,13 @@ public final class TradeTransactionService {
 		var entry = TradeCatalog.enabled(itemId);
 		if (entry.isEmpty()) return Result.DISABLED_ITEM;
 		TradeCatalog.Entry trade = entry.orElseThrow();
-		if (!SurvivalEligibility.isEligible(trade.item()) || !trade.enabled() || trade.price() < 1) return Result.INVALID_CATALOG_ENTRY;
+		if (!sellEligible(trade) || !trade.enabled() || trade.price() < 1) return Result.INVALID_CATALOG_ENTRY;
 		if (trade.item().builtInRegistryHolder().is(ItemTags.SHULKER_BOXES) && inventorySlot >= 0) {
 			if (quantity != 1) return Result.INVALID_SELL_QUANTITY;
 			return sellShulker(player, inventoryFor(player), trade, inventorySlot);
 		}
 
-		SellOffer offer;
-		try { offer = SellPricing.sellOfferFor(trade.price()); }
-		catch (IllegalArgumentException exception) { return Result.INVALID_CATALOG_ENTRY; }
+		SellOffer offer = trade.sellOffer();
 		if (quantity % offer.itemQuantity() != 0) return Result.INVALID_SELL_BUNDLE;
 
 		final int reward;
@@ -120,15 +129,18 @@ public final class TradeTransactionService {
 		for (ItemStack contained : contents.nonEmptyItemCopyStream().toList()) {
 			if (!SellEligibility.isSafeDefaultStack(contained) || contained.getItem().builtInRegistryHolder().is(ItemTags.SHULKER_BOXES)) throw new InvalidShulkerContents();
 			var entry = TradeCatalog.enabled(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(contained.getItem())).orElseThrow(InvalidShulkerContents::new);
-			if (!SurvivalEligibility.isEligible(entry.item())) throw new InvalidShulkerContents();
+			if (!sellEligible(entry)) throw new InvalidShulkerContents();
 			total = Math.addExact(total, rewardFor(entry, contained.getCount()));
 		}
 		return total;
 	}
 	private static long rewardFor(TradeCatalog.Entry entry, int quantity) {
-		SellOffer offer = SellPricing.sellOfferFor(entry.price());
+		SellOffer offer = entry.sellOffer();
 		if (quantity <= 0 || quantity % offer.itemQuantity() != 0) throw new InvalidShulkerContents();
 		return Math.multiplyExact((long)quantity / offer.itemQuantity(), offer.emeraldReward());
+	}
+	private static boolean sellEligible(TradeCatalog.Entry entry) {
+		return SurvivalEligibility.isEligible(entry.item()) || (!entry.id().getNamespace().equals("minecraft") && com.coshian.tradeeverything.price.PriceConfig.isExplicitlyConfigured(entry.id()));
 	}
 	private static final class InvalidShulkerContents extends RuntimeException { }
 	private static List<ItemStack> inventoryFor(ServerPlayer player) { return player.getInventory().getNonEquipmentItems(); }
@@ -203,6 +215,7 @@ public final class TradeTransactionService {
 		SUCCESS("success"), INVALID_SESSION("invalid_session"), STALE_CATALOG("stale_catalog"), INVALID_MERCHANT("invalid_merchant"),
 		DISABLED_ITEM("disabled_item"), INVALID_CATALOG_ENTRY("invalid_entry"), INSUFFICIENT_PAYMENT("insufficient_payment"), INVENTORY_FULL("inventory_full"),
 		INVALID_BUY_QUANTITY("invalid_buy_quantity"),
+		INVALID_VARIANT("invalid_variant"),
 		INVALID_ITEM("invalid_item"), INVALID_SELL_QUANTITY("invalid_sell_quantity"), INVALID_SELL_BUNDLE("invalid_sell_bundle"),
 		INSUFFICIENT_SELLABLE_ITEMS("insufficient_sellable_items"), UNSUPPORTED_ITEM_COMPONENTS("unsupported_item_components"),
 		REWARD_INVENTORY_FULL("reward_inventory_full"), UNSUPPORTED_CONTAINER_CONTENTS("unsupported_container_contents"), ARITHMETIC_OVERFLOW("arithmetic_overflow");

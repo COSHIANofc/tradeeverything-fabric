@@ -1,7 +1,13 @@
 package com.coshian.tradeeverything;
 
 import com.coshian.tradeeverything.catalog.SurvivalEligibility;
+import com.coshian.tradeeverything.advancement.AllItemsProgression;
+import com.coshian.tradeeverything.advancement.TradeProgressData;
+import com.coshian.tradeeverything.advancement.TradeAdvancements;
+import com.google.gson.JsonParser;
 import com.coshian.tradeeverything.catalog.TradeCatalog;
+import com.coshian.tradeeverything.catalog.TradeVariantKind;
+import com.coshian.tradeeverything.catalog.TradeVariantSelection;
 import com.coshian.tradeeverything.command.TradeEverythingCommands;
 import com.coshian.tradeeverything.entity.ClerkManager;
 import com.coshian.tradeeverything.menu.TradeEverythingMenu;
@@ -43,6 +49,44 @@ import net.minecraft.world.phys.Vec3;
 
 public final class TradeEverythingGameTest {
 	@GameTest
+	public void allItemsGeneratedUniverseMatchesBootstrappedRegistry(GameTestHelper helper) {
+		try (var stream = TradeEverythingGameTest.class.getResourceAsStream("/data/tradeeverything/advancement/all_items.json")) {
+			helper.assertTrue(stream != null, "Generated all_items advancement must be on the runtime resource path");
+			var json = JsonParser.parseReader(new java.io.InputStreamReader(stream)).getAsJsonObject();
+			var generated = json.getAsJsonObject("criteria").keySet();
+			var runtime = AllItemsProgression.requiredKeys().stream().map(AllItemsProgression::criterion).collect(java.util.stream.Collectors.toSet());
+			helper.assertTrue(runtime.equals(generated) && runtime.size() == 1411, "Bootstrapped registry canonical universe must equal generated criteria");
+			helper.assertTrue(json.getAsJsonArray("requirements").size() == runtime.size() && generated.contains("special__enchanted_book") && generated.contains("special__potion"), "All canonical criteria must be AND requirements with one book and potion unit");
+			helper.succeed();
+		} catch (Exception exception) { throw new RuntimeException(exception); }
+	}
+
+	@GameTest
+	public void allItemsAdvancementProgressUsesVanillaRequirements(GameTestHelper helper) {
+		var player = (net.minecraft.server.level.ServerPlayer)helper.makeMockServerPlayer(GameType.SURVIVAL);
+		var holder = helper.getLevel().getServer().getAdvancements().get(TradeEverything.id("all_items"));
+		helper.assertTrue(holder != null, "Generated all-items advancement must load");
+		var progress = player.getAdvancements().getOrStartProgress(holder);
+		helper.assertTrue(count(progress.getCompletedCriteria()) == 0 && count(progress.getRemainingCriteria()) == 1411 && !progress.isDone(), "Fresh progress must be 0/1411");
+		for (String criterion : java.util.List.of("item__minecraft__diamond", "special__enchanted_book", "special__potion")) player.getAdvancements().award(holder, criterion);
+		progress = player.getAdvancements().getOrStartProgress(holder);
+		helper.assertTrue(count(progress.getCompletedCriteria()) == 3 && count(progress.getRemainingCriteria()) == 1408 && !progress.isDone() && Math.abs(progress.getPercent() - 3.0F / 1411.0F) < 0.00001F, "Partial progress must expose vanilla 3/1411 progress data");
+		for (String criterion : holder.value().criteria().keySet()) player.getAdvancements().award(holder, criterion);
+		progress = player.getAdvancements().getOrStartProgress(holder);
+		helper.assertTrue(count(progress.getCompletedCriteria()) == 1411 && count(progress.getRemainingCriteria()) == 0 && progress.isDone(), "All AND requirements must complete advancement");
+		helper.succeed();
+	}
+	@GameTest
+	public void legacyProgressMigrationAndSynchronizationAreIdempotent(GameTestHelper helper) {
+		var migrated = TradeProgressData.canonicalizeLegacy(java.util.List.of(Identifier.withDefaultNamespace("diamond"), Identifier.withDefaultNamespace("enchanted_book"), Identifier.withDefaultNamespace("potion"), Identifier.withDefaultNamespace("splash_potion"), Identifier.withDefaultNamespace("lingering_potion"), Identifier.parse("examplemod:fake_item")));
+		helper.assertTrue(migrated.equals(java.util.Set.of(Identifier.withDefaultNamespace("diamond"), AllItemsProgression.ENCHANTED_BOOK, AllItemsProgression.POTION)), "Production legacy decoder must canonicalize and deduplicate representative IDs");
+		var player=(net.minecraft.server.level.ServerPlayer)helper.makeMockServerPlayer(GameType.SURVIVAL); var data=helper.getLevel().getServer().overworld().getDataStorage().computeIfAbsent(TradeProgressData.TYPE);
+		migrated.forEach(key -> data.add(player.getUUID(), key)); TradeAdvancements.synchronize(player);
+		var holder=helper.getLevel().getServer().getAdvancements().get(TradeEverything.id("all_items")); var progress=player.getAdvancements().getOrStartProgress(holder); int first=count(progress.getCompletedCriteria()); TradeAdvancements.synchronize(player);
+		helper.assertTrue(first==3 && count(player.getAdvancements().getOrStartProgress(holder).getCompletedCriteria())==3 && !progress.isDone(), "Production join synchronization must restore only saved criteria and be idempotent"); helper.succeed();
+	}
+	private static int count(Iterable<String> criteria) { int count = 0; for (String ignored : criteria) count++; return count; }
+	@GameTest
 	public void treCommandTreeReplacesLegacyRoot(GameTestHelper helper) {
 		CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
 		TradeEverythingCommands.registerForTesting(dispatcher);
@@ -78,9 +122,37 @@ public final class TradeEverythingGameTest {
 		helper.assertTrue(variants.size() == vanilla.size() && !variants.isEmpty(), "Every and only vanilla enchantment must have one book variant");
 		for (var entry : variants) {
 			ItemStack output = TradeCatalog.output(entry); var stored = output.get(DataComponents.STORED_ENCHANTMENTS);
-			helper.assertTrue(stored != null && stored.getLevel(entry.enchantment()) == entry.enchantment().value().getMaxLevel(), "Book output must carry its valid maximum stored enchantment");
+			helper.assertTrue(stored != null && stored.getLevel(entry.enchantment()) == ((TradeCatalog.EnchantmentVariant)entry.variant()).defaultLevel(), "Book output must carry its authoritative default stored enchantment level");
 		}
 		helper.assertTrue(TradeCatalog.enabled(book).isEmpty() && TradeCatalog.enabled(book, TradeEverything.id("forged_enchantment")).isEmpty(), "Blank books and forged variants must not be Buy entries");
+		helper.succeed();
+	}
+
+	@GameTest
+	public void typedVariantsResolveOnlyBoundedServerSelections(GameTestHelper helper) {
+		TradeCatalog.rebuild(helper.getLevel().registryAccess());
+		Identifier book = BuiltInRegistries.ITEM.getKey(Items.ENCHANTED_BOOK);
+		var mending = TradeCatalog.enabled(book, Identifier.withDefaultNamespace("mending")).orElseThrow();
+		var sharpness = TradeCatalog.enabled(book, Identifier.withDefaultNamespace("sharpness")).orElseThrow();
+		helper.assertTrue(mending.variant().kind() == TradeVariantKind.ENCHANTMENT && TradeCatalog.resolveOutput(mending, TradeVariantSelection.enchantment(1)).isPresent(), "Mending I must resolve from the server catalog");
+		helper.assertTrue(TradeCatalog.resolveOutput(mending, TradeVariantSelection.enchantment(2)).isEmpty(), "Mending II must be rejected before transaction mutation");
+		int sharpnessMax = ((TradeCatalog.EnchantmentVariant)sharpness.variant()).maximumLevel();
+		helper.assertTrue(TradeCatalog.resolveOutput(sharpness, TradeVariantSelection.enchantment(1)).isPresent() && TradeCatalog.resolveOutput(sharpness, TradeVariantSelection.enchantment(sharpnessMax)).isPresent() && TradeCatalog.resolveOutput(sharpness, TradeVariantSelection.enchantment(sharpnessMax + 1)).isEmpty(), "Sharpness bounds must come from the authoritative entry");
+		var potion = TradeCatalog.enabledEntries().stream().filter(entry -> entry.variant().kind() == TradeVariantKind.POTION).findFirst().orElseThrow();
+		var normal = TradeCatalog.resolveOutput(potion, TradeVariantSelection.potion(0, TradeVariantSelection.PotionContainer.NORMAL)).orElseThrow();
+		var splash = TradeCatalog.resolveOutput(potion, TradeVariantSelection.potion(0, TradeVariantSelection.PotionContainer.SPLASH)).orElseThrow();
+		var lingering = TradeCatalog.resolveOutput(potion, TradeVariantSelection.potion(0, TradeVariantSelection.PotionContainer.LINGERING)).orElseThrow();
+		helper.assertTrue(normal.is(Items.POTION) && splash.is(Items.SPLASH_POTION) && lingering.is(Items.LINGERING_POTION), "Potion container selection must map only to vanilla potion containers");
+		helper.assertTrue(!com.coshian.tradeeverything.trade.SellEligibility.isSafeDefaultStack(normal) && !com.coshian.tradeeverything.trade.SellEligibility.isSafeDefaultStack(splash) && !com.coshian.tradeeverything.trade.SellEligibility.isSafeDefaultStack(TradeCatalog.resolveOutput(mending, TradeVariantSelection.enchantment(1)).orElseThrow()), "Component-bearing potion and enchanted-book stacks must remain outside default-stack Sell matching");
+		var selectedPotion = potion.potionFamily().options().getFirst().potion();
+		helper.assertTrue(normal.get(DataComponents.POTION_CONTENTS).potion().equals(java.util.Optional.of(selectedPotion)) && splash.get(DataComponents.POTION_CONTENTS).potion().equals(java.util.Optional.of(selectedPotion)) && lingering.get(DataComponents.POTION_CONTENTS).potion().equals(java.util.Optional.of(selectedPotion)), "Potion contents must be one server-selected holder across containers");
+		helper.assertTrue(TradeCatalog.resolveOutput(potion, TradeVariantSelection.potion(-1, TradeVariantSelection.PotionContainer.NORMAL)).isEmpty() && TradeCatalog.resolveOutput(potion, TradeVariantSelection.potion(potion.potionFamily().options().size(), TradeVariantSelection.PotionContainer.NORMAL)).isEmpty(), "Potion option bounds must reject forged selections");
+		Villager merchant = createMerchant(helper, new BlockPos(3, 1, 3));
+		var player = (net.minecraft.server.level.ServerPlayer)helper.makeMockServerPlayer(GameType.SURVIVAL);
+		player.setPos(merchant.position()); player.containerMenu = new TradeEverythingMenu(37, player.getInventory(), merchant.getId(), TradeCatalog.version());
+		player.getInventory().add(new ItemStack(Items.EMERALD, 64)); int emeraldsBefore = count(player, Items.EMERALD);
+		helper.assertTrue(TradeTransactionService.purchase(player, 37, TradeCatalog.version(), mending.id(), mending.variantId(), TradeVariantSelection.enchantment(2), 1) == TradeTransactionService.Result.INVALID_VARIANT && count(player, Items.EMERALD) == emeraldsBefore && count(player, Items.ENCHANTED_BOOK) == 0, "Invalid bounded variant selection must fail before payment or inventory mutation");
+		helper.assertTrue(TradeTransactionService.purchase(player, 37, TradeCatalog.version(), potion.id(), potion.variantId(), TradeVariantSelection.potion(0, TradeVariantSelection.PotionContainer.SPLASH), 1) == TradeTransactionService.Result.SUCCESS, "A valid server-resolved potion selection must use the ordinary atomic transaction path");
 		helper.succeed();
 	}
 
@@ -320,6 +392,24 @@ public final class TradeEverythingGameTest {
 				catch (Exception ignored) { }
 			}
 		}
+	}
+
+	@GameTest
+	public void explicitSellBundlesOverrideDerivedPricingAtomically(GameTestHelper helper) {
+		Path directory = null;
+		try {
+			directory = Files.createTempDirectory("tradeeverything-explicit-sell-"); Path config = directory.resolve(PriceConfig.FILE_NAME);
+			Files.writeString(config, "{\"catalog_version\":95,\"items\":{\"minecraft:diamond\":{\"enabled\":true,\"buy\":{\"emeralds\":10,\"output\":1},\"sell\":{\"items\":4,\"emeralds\":3}}}}");
+			PriceConfig.load(config, false); TradeCatalog.rebuild();
+			Villager merchant = createMerchant(helper, new BlockPos(3, 1, 3)); var player = (net.minecraft.server.level.ServerPlayer)helper.makeMockServerPlayer(GameType.SURVIVAL);
+			player.setPos(merchant.position()); player.containerMenu = new TradeEverythingMenu(95, player.getInventory(), merchant.getId(), 95); player.getInventory().add(new ItemStack(Items.DIAMOND, 8));
+			Identifier diamond = BuiltInRegistries.ITEM.getKey(Items.DIAMOND);
+			helper.assertTrue(TradeTransactionService.sell(player, 95, 95, diamond, 5) == TradeTransactionService.Result.INVALID_SELL_BUNDLE && count(player, Items.DIAMOND) == 8 && count(player, Items.EMERALD) == 0, "Explicit 4-item Sell bundles reject non-divisible quantities atomically");
+			helper.assertTrue(TradeTransactionService.sell(player, 95, 95, diamond, 4) == TradeTransactionService.Result.SUCCESS && count(player, Items.DIAMOND) == 4 && count(player, Items.EMERALD) == 3, "Explicit Sell must override derived SellPricing with 4 -> 3");
+			helper.assertTrue(TradeTransactionService.sell(player, 95, 95, diamond, 4) == TradeTransactionService.Result.SUCCESS && count(player, Items.EMERALD) == 6, "Multiple exact configured bundles scale with checked server arithmetic");
+			helper.succeed();
+		} catch (Exception exception) { throw new RuntimeException(exception); }
+		finally { PriceConfig.load(); TradeCatalog.rebuild(); if (directory != null) try { Files.deleteIfExists(directory.resolve(PriceConfig.FILE_NAME)); Files.deleteIfExists(directory); } catch (Exception ignored) { } }
 	}
 
 	@GameTest(maxTicks = 60)

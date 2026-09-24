@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.8.b-dev
+
+### Added
+
+- Added persistent, server-authoritative all-items progress with a deterministic 1411-unit vanilla universe, including legacy-data migration and join synchronization.
+- Added logical vanilla potion families with legal brewing-reachable choices and Potion, Splash Potion, and Lingering Potion containers.
+- Added selectable levels for the one logical entry for each vanilla enchantment.
+- Added explicit opt-in configuration for registered non-vanilla items.
+- Added independent modern Buy and Sell rules, including bundle Sell ratios.
+
+### Changed
+
+- The trade catalog now shows seven visible rows, with shared right-panel layout geometry for text and controls.
+- Buy/Sell requests use bounded variant selections and server-authoritative output construction.
+- Modern `buy` rules override legacy Buy fields; legacy `emeralds` and `output` remain supported as Buy-only fields.
+
+### Fixed
+
+- Preserved component-sensitive identity for enchanted books and potion containers during Sell transactions.
+- Kept all potion variants and enchanted-book levels in their single all-items progress units; explicitly configured non-vanilla items contribute no all-items units.
+
+### Compatibility
+
+- Existing configurations are read without automatic rewriting. Rules without an explicit modern `sell` block continue to use the existing `SellPricing` fallback.
+
 ## 0.7.a-dev
 
 - Replaced only the persisted structure-generated Witch add in Minecraft 26.2 Swamp Huts with the canonical TradeEverything merchant while preserving the vanilla Cat path.

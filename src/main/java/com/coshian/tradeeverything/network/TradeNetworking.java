@@ -1,9 +1,17 @@
 package com.coshian.tradeeverything.network;
 
 import com.coshian.tradeeverything.catalog.TradeCatalog;
+import com.coshian.tradeeverything.catalog.TradeVariantSelection;
+import com.coshian.tradeeverything.catalog.TradeVariantSelection.PotionContainer;
 import com.coshian.tradeeverything.menu.TradeEverythingMenu;
 import com.coshian.tradeeverything.network.TradePayloads.CatalogEntryData;
 import com.coshian.tradeeverything.network.TradePayloads.CatalogSync;
+import com.coshian.tradeeverything.network.TradePayloads.EnchantmentVariantData;
+import com.coshian.tradeeverything.network.TradePayloads.NoneVariantData;
+import com.coshian.tradeeverything.network.TradePayloads.PotionOptionData;
+import com.coshian.tradeeverything.network.TradePayloads.PotionOptionKind;
+import com.coshian.tradeeverything.network.TradePayloads.PotionVariantData;
+import com.coshian.tradeeverything.network.TradePayloads.VariantData;
 import com.coshian.tradeeverything.network.TradePayloads.PurchaseRequest;
 import com.coshian.tradeeverything.network.TradePayloads.PurchaseResult;
 import com.coshian.tradeeverything.network.TradePayloads.SellRequest;
@@ -30,7 +38,7 @@ public final class TradeNetworking {
 		PayloadTypeRegistry.serverboundPlay().register(SellRequest.TYPE, SellRequest.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(PurchaseResult.TYPE, PurchaseResult.CODEC);
 		ServerPlayNetworking.registerGlobalReceiver(PurchaseRequest.TYPE, (payload, context) -> {
-			TradeTransactionService.Result result = TradeTransactionService.purchase(context.player(), payload.containerId(), payload.version(), payload.itemId(), payload.variantId(), payload.quantity());
+			TradeTransactionService.Result result = TradeTransactionService.purchase(context.player(), payload.containerId(), payload.version(), payload.itemId(), payload.variantId(), new TradeVariantSelection(payload.enchantmentLevel(), payload.potionOption(), PotionContainer.fromNetworkId(payload.potionContainer())), payload.quantity());
 			ServerPlayNetworking.send(context.player(), new PurchaseResult(payload.containerId(), TransactionType.BUY, result.success(), result.success() ? "screen.tradeeverything.result.buy_success" : result.translationKey()));
 		});
 		ServerPlayNetworking.registerGlobalReceiver(SellRequest.TYPE, (payload, context) -> {
@@ -58,8 +66,19 @@ public final class TradeNetworking {
 		List<TradeCatalog.Entry> entries = TradeCatalog.enabledEntries();
 		if (cachedCatalogIdentity != entries) {
 			cachedCatalogIdentity = entries;
-			cachedCatalogPayload = entries.stream().map(entry -> new CatalogEntryData(entry.id(), entry.variantId(), entry.price(), entry.quantity())).toList();
+			cachedCatalogPayload = entries.stream().map(entry -> new CatalogEntryData(entry.id(), entry.variantId(), entry.price(), entry.quantity(), entry.sellOffer().itemQuantity(), entry.sellOffer().emeraldReward(), variantData(entry))).toList();
 		}
 		return cachedCatalogPayload;
+	}
+	private static VariantData variantData(TradeCatalog.Entry entry) {
+		return switch (entry.variant()) {
+			case TradeCatalog.OrdinaryVariant ignored -> new NoneVariantData();
+			case TradeCatalog.EnchantmentVariant enchantment -> new EnchantmentVariantData(enchantment.minimumLevel(), enchantment.maximumLevel(), enchantment.defaultLevel());
+			case TradeCatalog.PotionVariant potion -> new PotionVariantData(potion.family().options().stream().map(option -> new PotionOptionData(option.id(), optionKind(option.id()))).toList(), List.of(PotionContainer.NORMAL, PotionContainer.SPLASH, PotionContainer.LINGERING), 0, PotionContainer.NORMAL);
+		};
+	}
+	private static PotionOptionKind optionKind(net.minecraft.resources.Identifier id) {
+		String path = id.getPath();
+		return path.startsWith("strong_") ? PotionOptionKind.STRONG : path.startsWith("long_") ? PotionOptionKind.EXTENDED : PotionOptionKind.NORMAL;
 	}
 }

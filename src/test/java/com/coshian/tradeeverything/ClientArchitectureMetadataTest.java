@@ -24,8 +24,10 @@ final class ClientArchitectureMetadataTest {
 		String client = Files.walk(Path.of("src/client/java")).filter(path -> path.toString().endsWith(".java")).map(ClientArchitectureMetadataTest::read).reduce("", String::concat);
 		assertTrue(common.contains("CustomPacketPayload") && common.contains("ServerPlayNetworking"));
 		assertTrue(client.contains("ClientModInitializer") && client.contains("EditBox") && client.contains("ClientPlayNetworking"));
-		assertEquals(List.of("containerId", "version", "itemId", "variantId", "quantity"), java.util.Arrays.stream(com.coshian.tradeeverything.network.TradePayloads.PurchaseRequest.class.getRecordComponents()).map(java.lang.reflect.RecordComponent::getName).toList(),
-			"Client purchase requests may name a catalog variant but must not contain price, output, or ItemStack data");
+		assertEquals(List.of("containerId", "version", "itemId", "variantId", "enchantmentLevel", "potionOption", "potionContainer", "quantity"), java.util.Arrays.stream(com.coshian.tradeeverything.network.TradePayloads.PurchaseRequest.class.getRecordComponents()).map(java.lang.reflect.RecordComponent::getName).toList(),
+			"Client purchase requests may contain only bounded variant selections, never price, output, or ItemStack data");
+		assertTrue(java.util.Arrays.stream(com.coshian.tradeeverything.network.TradePayloads.PurchaseRequest.class.getRecordComponents()).noneMatch(component -> component.getType().getName().contains("ItemStack") || component.getType().getName().contains("PotionContents") || component.getType().getName().contains("Holder")),
+			"Purchase requests must not carry client-authoritative stacks, contents, or registry holders");
 		assertEquals(List.of("containerId", "version", "itemId", "quantity", "inventorySlot"), java.util.Arrays.stream(com.coshian.tradeeverything.network.TradePayloads.SellRequest.class.getRecordComponents()).map(java.lang.reflect.RecordComponent::getName).toList(),
 			"Client Sell requests may select one inventory stack, but must not contain price, reward, or contents");
 		assertEquals(List.of("containerId", "transactionType", "success", "message"), java.util.Arrays.stream(com.coshian.tradeeverything.network.TradePayloads.PurchaseResult.class.getRecordComponents()).map(java.lang.reflect.RecordComponent::getName).toList(),
